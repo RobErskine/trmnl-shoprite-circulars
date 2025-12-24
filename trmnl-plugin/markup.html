@@ -1,0 +1,161 @@
+<!--
+  ShopRite Weekly Circular Plugin for TRMNL
+
+  This plugin displays the first page of the weekly ShopRite circular
+  based on the store ID configured in the plugin settings.
+
+  Required Plugin Setting:
+    - Custom Field: shoprite_store_id (e.g., "630" for Manasquan/Wall Township)
+-->
+
+<div class="layout layout--col layout--center">
+  <!-- Loading indicator (hidden once image loads) -->
+  <div id="loading-indicator" class="flex flex--col flex--center gap--medium">
+    <span class="title">Loading ShopRite Circular...</span>
+    <span class="description">Store ID: {{ plugin_settings.custom_field_values.shoprite_store_id | default: "630" }}</span>
+  </div>
+
+  <!-- Circular image container -->
+  <div id="circular-container" class="w--full h--full" style="display: none;">
+    <img
+      id="circular-image"
+      class="image image--contain w--full h--full"
+      alt="ShopRite Weekly Circular"
+    />
+  </div>
+
+  <!-- Error state -->
+  <div id="error-container" class="flex flex--col flex--center gap--medium" style="display: none;">
+    <span class="title">Unable to Load Circular</span>
+    <span class="description" id="error-message"></span>
+  </div>
+</div>
+
+<div class="title_bar">
+  <span class="title">ShopRite Weekly Circular</span>
+  <span class="instance" id="circular-title">Loading...</span>
+</div>
+
+<script type="text/javascript">
+(function() {
+  // ShopRite client ID on RedPepper
+  const CLIENT_ID = "4573";
+
+  // Get store ID from plugin settings, default to Manasquan/Wall Township
+  const storeId = "{{ plugin_settings.custom_field_values.shoprite_store_id | default: '630' }}";
+
+  // API endpoints
+  const GEO_LOCATION_API = `https://app.redpepper.digital/client/${CLIENT_ID}/catalogue/geo_location/json?_format=json`;
+  const PAGES_API = (catalogueId) =>
+    `https://app.redpepper.digital/catalogue/${catalogueId}/page-images/json?_format=json`;
+  const METADATA_API = (catalogueId) =>
+    `https://app.redpepper.digital/node/${catalogueId}?_format=json`;
+
+  // DOM elements
+  const loadingEl = document.getElementById('loading-indicator');
+  const containerEl = document.getElementById('circular-container');
+  const imageEl = document.getElementById('circular-image');
+  const errorEl = document.getElementById('error-container');
+  const errorMsgEl = document.getElementById('error-message');
+  const titleEl = document.getElementById('circular-title');
+
+  function showError(message) {
+    loadingEl.style.display = 'none';
+    containerEl.style.display = 'none';
+    errorEl.style.display = 'flex';
+    errorMsgEl.textContent = message;
+    titleEl.textContent = 'Error';
+  }
+
+  function showImage(imageUrl, circularTitle) {
+    loadingEl.style.display = 'none';
+    errorEl.style.display = 'none';
+    containerEl.style.display = 'block';
+    imageEl.src = imageUrl;
+    titleEl.textContent = circularTitle || 'Weekly Circular';
+  }
+
+  async function fetchJson(url) {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      console.error('Fetch error:', error);
+      return null;
+    }
+  }
+
+  async function getCatalogueMetadata(catalogueId) {
+    const data = await fetchJson(METADATA_API(catalogueId));
+    if (!data) return null;
+    return {
+      id: catalogueId,
+      title: data.title?.[0]?.value ?? "Unknown"
+    };
+  }
+
+  async function findWeeklyCatalogue(storeId) {
+    // Get all store locations
+    const locations = await fetchJson(GEO_LOCATION_API);
+    if (!locations) return null;
+
+    // Find entries for this store
+    const storeEntries = locations.filter(loc => loc.field_store_id === storeId);
+    if (storeEntries.length === 0) return null;
+
+    // Get unique catalogue IDs for this store
+    const catalogueIds = [...new Set(storeEntries.map(e => e.field_version))];
+
+    // Fetch metadata for each to find the weekly circular
+    for (const catId of catalogueIds.sort((a, b) => parseInt(b) - parseInt(a))) {
+      const meta = await getCatalogueMetadata(catId);
+      if (meta && meta.title.toLowerCase().startsWith('week of')) {
+        return { catalogueId: catId, title: meta.title };
+      }
+    }
+
+    return null;
+  }
+
+  async function getFirstPageUrl(catalogueId) {
+    const pages = await fetchJson(PAGES_API(catalogueId));
+    if (!pages || pages.length === 0) return null;
+
+    // Sort by page number and get first page
+    const sorted = pages.sort((a, b) => parseInt(a.page || '0') - parseInt(b.page || '0'));
+    return (sorted[0].image || '').replace(/\\\//g, '/');
+  }
+
+  async function loadCircular() {
+    try {
+      // Find the weekly catalogue for this store
+      const catalogue = await findWeeklyCatalogue(storeId);
+      if (!catalogue) {
+        showError(`No weekly circular found for store ${storeId}`);
+        return;
+      }
+
+      // Get the first page image URL
+      const imageUrl = await getFirstPageUrl(catalogue.catalogueId);
+      if (!imageUrl) {
+        showError('Could not load circular image');
+        return;
+      }
+
+      // Display the image
+      showImage(imageUrl, catalogue.title);
+
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // Start loading
+  loadCircular();
+})();
+</script>
