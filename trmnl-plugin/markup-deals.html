@@ -1,0 +1,107 @@
+<!--
+  ShopRite Weekly Deals Plugin for TRMNL
+
+  Displays current sale items from your local ShopRite store.
+
+  Required Plugin Settings:
+    - Custom Field: shoprite_store_id (e.g., "641")
+    - Custom Field: shoprite_category (e.g., "meat-id-520692")
+    - Custom Field: api_endpoint (your Cloudflare Worker URL)
+-->
+
+<div id="loading" class="layout layout--col layout--center">
+  <span class="title">Loading ShopRite Deals...</span>
+  <span class="description">{{ plugin_settings.custom_field_values.shoprite_category | default: "meat" }}</span>
+</div>
+
+<div id="content" class="layout layout--col gap--medium" style="display: none;">
+  <!-- Products will be inserted here -->
+</div>
+
+<div id="error" class="layout layout--col layout--center" style="display: none;">
+  <span class="title">Could Not Load Deals</span>
+  <span class="description" id="error-msg"></span>
+</div>
+
+<div class="title_bar">
+  <span class="title">ShopRite Weekly Deals</span>
+  <span class="instance" id="category-name">Loading...</span>
+</div>
+
+<script>
+(function() {
+  // Get config from plugin settings
+  const apiEndpoint = "{{ plugin_settings.custom_field_values.api_endpoint | default: 'https://shoprite-deals.YOUR-SUBDOMAIN.workers.dev/shoprite-deals' }}";
+  const storeId = "{{ plugin_settings.custom_field_values.shoprite_store_id | default: '641' }}";
+  const category = "{{ plugin_settings.custom_field_values.shoprite_category | default: 'meat-id-520692' }}";
+  const limit = {{ plugin_settings.custom_field_values.product_limit | default: 12 }};
+  const subcategory = "{{ plugin_settings.custom_field_values.subcategory | default: '' }}";
+
+  const loadingEl = document.getElementById('loading');
+  const contentEl = document.getElementById('content');
+  const errorEl = document.getElementById('error');
+  const errorMsgEl = document.getElementById('error-msg');
+  const categoryEl = document.getElementById('category-name');
+
+  function showError(msg) {
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'none';
+    errorEl.style.display = 'flex';
+    errorMsgEl.textContent = msg;
+  }
+
+  function formatPrice(product) {
+    if (product.isDiscounted && product.wasPrice) {
+      return `<span class="value value--medium text--red">${product.price}</span><br><span class="description" style="text-decoration: line-through;">${product.wasPrice}</span>`;
+    }
+    return `<span class="value value--medium">${product.price}</span>`;
+  }
+
+  function renderProducts(data) {
+    loadingEl.style.display = 'none';
+    contentEl.style.display = 'flex';
+
+    // Update category name
+    categoryEl.textContent = data.categoryInfo?.title || category;
+
+    // Create grid layout
+    const grid = document.createElement('div');
+    grid.className = 'grid grid--cols-3 gap--medium';
+
+    data.products.slice(0, 9).forEach(product => {
+      const item = document.createElement('div');
+      item.className = 'flex flex--col gap--small';
+      item.innerHTML = `
+        <img src="${product.image}" class="image rounded w--full" style="aspect-ratio: 1; object-fit: contain;" alt="${product.name}">
+        <div class="flex flex--col gap--xsmall">
+          <span class="label label--small" data-clamp="2">${product.name}</span>
+          ${formatPrice(product)}
+          ${product.priceLabel ? `<span class="label label--xsmall label--inverted">${product.priceLabel}</span>` : ''}
+        </div>
+      `;
+      grid.appendChild(item);
+    });
+
+    contentEl.appendChild(grid);
+  }
+
+  async function load() {
+    try {
+      const url = `${apiEndpoint}?store=${storeId}&category=${category}&limit=${limit}${subcategory ? '&subcategory=' + subcategory : ''}`;
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      if (!data.products || data.products.length === 0) throw new Error('No products found');
+
+      renderProducts(data);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  load();
+})();
+</script>

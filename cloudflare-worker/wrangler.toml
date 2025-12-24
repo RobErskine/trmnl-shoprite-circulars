@@ -1,0 +1,8 @@
+name = "shoprite-deals"
+main = "shoprite-deals.js"
+compatibility_date = "2024-01-01"
+
+# Uncomment and customize for custom domain
+# [env.production]
+# workers_dev = false
+# route = "shoprite-deals.YOUR-SUBDOMAIN.workers.dev/*"

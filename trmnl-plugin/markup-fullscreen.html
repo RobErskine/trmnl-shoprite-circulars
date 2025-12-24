@@ -1,0 +1,110 @@
+<!--
+  ShopRite Weekly Circular Plugin for TRMNL (Full-Screen Version)
+
+  This plugin displays the first page of the weekly ShopRite circular
+  edge-to-edge on the TRMNL display for maximum readability.
+
+  Required Plugin Setting:
+    - Custom Field: shoprite_store_id (e.g., "630" for Manasquan/Wall Township)
+
+  Recommended Plugin Settings:
+    - Enable "No Bleed" mode for edge-to-edge display
+-->
+
+<!-- Loading state -->
+<div id="loading" class="layout layout--col layout--center">
+  <span class="title title--large">Loading ShopRite Circular</span>
+  <span class="description">Store ID: {{ plugin_settings.custom_field_values.shoprite_store_id | default: "630" }}</span>
+</div>
+
+<!-- Image container - takes full screen -->
+<div id="circular" style="display: none; width: 100%; height: 100%;">
+  <img
+    id="circular-img"
+    style="width: 100%; height: 100%; object-fit: contain;"
+    alt="ShopRite Weekly Circular"
+  />
+</div>
+
+<!-- Error state -->
+<div id="error" class="layout layout--col layout--center" style="display: none;">
+  <span class="title">Could Not Load Circular</span>
+  <span class="description" id="error-msg">Please check your store ID</span>
+</div>
+
+<script>
+(function() {
+  const CLIENT_ID = "4573";
+  const storeId = "{{ plugin_settings.custom_field_values.shoprite_store_id | default: '630' }}";
+
+  const GEO_API = `https://app.redpepper.digital/client/${CLIENT_ID}/catalogue/geo_location/json?_format=json`;
+  const PAGES_API = id => `https://app.redpepper.digital/catalogue/${id}/page-images/json?_format=json`;
+  const META_API = id => `https://app.redpepper.digital/node/${id}?_format=json`;
+
+  async function fetchJSON(url) {
+    const r = await fetch(url, { headers: { Accept: 'application/json' }});
+    return r.ok ? r.json() : null;
+  }
+
+  async function getTitle(catId) {
+    const d = await fetchJSON(META_API(catId));
+    return d?.title?.[0]?.value || '';
+  }
+
+  async function findWeeklyCatalogue() {
+    const locs = await fetchJSON(GEO_API);
+    if (!locs) return null;
+
+    const entries = locs.filter(l => l.field_store_id === storeId);
+    if (!entries.length) return null;
+
+    const catIds = [...new Set(entries.map(e => e.field_version))].sort((a,b) => b - a);
+
+    for (const id of catIds) {
+      const title = await getTitle(id);
+      if (title.toLowerCase().startsWith('week of')) {
+        return { id, title };
+      }
+    }
+    return null;
+  }
+
+  async function getFirstPage(catId) {
+    const pages = await fetchJSON(PAGES_API(catId));
+    if (!pages?.length) return null;
+    pages.sort((a,b) => (parseInt(a.page)||0) - (parseInt(b.page)||0));
+    return (pages[0].image || '').replace(/\\\//g, '/');
+  }
+
+  async function load() {
+    try {
+      const cat = await findWeeklyCatalogue();
+      if (!cat) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'flex';
+        document.getElementById('error-msg').textContent = 'No weekly circular for store ' + storeId;
+        return;
+      }
+
+      const imgUrl = await getFirstPage(cat.id);
+      if (!imgUrl) {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('error').style.display = 'flex';
+        document.getElementById('error-msg').textContent = 'Could not load image';
+        return;
+      }
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('circular').style.display = 'block';
+      document.getElementById('circular-img').src = imgUrl;
+
+    } catch (e) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'flex';
+      document.getElementById('error-msg').textContent = e.message;
+    }
+  }
+
+  load();
+})();
+</script>

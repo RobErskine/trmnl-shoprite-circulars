@@ -1,0 +1,14 @@
+{
+  "name": "shoprite-deals-worker",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker that scrapes ShopRite deals and returns clean JSON",
+  "main": "shoprite-deals.js",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail"
+  },
+  "keywords": ["shoprite", "deals", "cloudflare-workers", "scraper", "api"],
+  "author": "",
+  "license": "MIT"
+}

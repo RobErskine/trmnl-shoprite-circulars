@@ -1,0 +1,66 @@
+<!--
+  ShopRite Weekly Deals Plugin for TRMNL (List View)
+
+  Displays current sale items in a compact list format.
+  Best for showing more items at once.
+-->
+
+<div id="loading" class="layout layout--col layout--center">
+  <span class="title">Loading Deals...</span>
+</div>
+
+<div id="content" class="layout layout--col gap--small" style="display: none;"></div>
+
+<div id="error" class="layout layout--col layout--center" style="display: none;">
+  <span class="title">Error Loading Deals</span>
+  <span class="description" id="error-msg"></span>
+</div>
+
+<div class="title_bar">
+  <span class="title">ShopRite Deals</span>
+  <span class="instance" id="category-name"></span>
+</div>
+
+<script>
+(function() {
+  const apiEndpoint = "{{ plugin_settings.custom_field_values.api_endpoint }}";
+  const storeId = "{{ plugin_settings.custom_field_values.shoprite_store_id | default: '641' }}";
+  const category = "{{ plugin_settings.custom_field_values.shoprite_category | default: 'meat-id-520692' }}";
+  const limit = {{ plugin_settings.custom_field_values.product_limit | default: 15 }};
+
+  async function load() {
+    try {
+      const url = `${apiEndpoint}?store=${storeId}&category=${category}&limit=${limit}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      if (data.error || !data.products?.length) throw new Error(data.error || 'No products');
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('content').style.display = 'flex';
+      document.getElementById('category-name').textContent = data.categoryInfo?.title || '';
+
+      const content = document.getElementById('content');
+      data.products.forEach(p => {
+        const item = document.createElement('div');
+        item.className = 'item';
+        item.innerHTML = `
+          <div class="meta"><img src="${p.image}" class="w--12 h--12 rounded" alt=""></div>
+          <div class="content">
+            <span class="label" data-clamp="1">${p.name}</span>
+            <span class="description">${p.price}${p.isDiscounted ? ' <span class="text--line-through">' + p.wasPrice + '</span>' : ''}</span>
+          </div>
+        `;
+        content.appendChild(item);
+      });
+    } catch (error) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('error').style.display = 'flex';
+      document.getElementById('error-msg').textContent = error.message;
+    }
+  }
+
+  load();
+})();
+</script>
